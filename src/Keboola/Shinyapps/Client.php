@@ -87,8 +87,10 @@ class Client extends \GuzzleHttp\Client
         if (empty($config['token'])) {
             throw new \InvalidArgumentException('Storage API token must be set.');
         }
+        $token = $config['token'];
 
         $apiUrl = self::DEFAULT_API_URL;
+
         if (!empty($config['url'])) {
             $apiUrl = $config['url'];
         }
@@ -243,7 +245,6 @@ class Client extends \GuzzleHttp\Client
         $params['name'] = $name;
         $params['description'] = $description;
 
-
         $uri = new Uri($this->url);
         $uri = $uri->withPath("shinyapps/configs");
         try {
@@ -253,7 +254,7 @@ class Client extends \GuzzleHttp\Client
             throw new ClientException($e->getMessage(), 0, $e);
         }
         $ret = $this->decodeResponse($response);
-        var_dump($ret)
+        var_dump($ret);
         if (!isset($ret['result'])) {
             throw new ClientException("Invalid response.");
         } else {
@@ -282,10 +283,10 @@ class Client extends \GuzzleHttp\Client
     }
 
     public function pingApp($appId) {
-        $uri = new Uri(this->uri);
+        $uri = new Uri($this->url);
         $uri = $uri->withPath("shinyapps/configs/" . $appId);
         try {
-            $request = new Request('POST', $uri, ['X-StorageApi-Token' => $this->token], );
+            $request = new Request('POST', $uri, ['X-StorageApi-Token' => $this->token], ['X-StorageApi-Token' => $this->token]);
             $response = $this->send($request);
         } catch (RequestException $e) {
             throw new ClientException($e->getMessage(), 0, $e);

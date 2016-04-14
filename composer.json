@@ -12,6 +12,7 @@
         "squizlabs/php_codesniffer": "~2.4"
     },
     "require": {
+        "keboola/storage-api-client": "~4.5",
         "guzzlehttp/guzzle": "~6.1"
     }
 }

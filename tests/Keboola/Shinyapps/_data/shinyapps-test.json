@@ -1,0 +1,6 @@
+{
+  "name": "Component configuration name",
+  "description": "Component configuration description",
+  "repository": "https://github.com/keboola/test-shiny-application.git",
+  "bucket": "in.c-shinyapps-test"
+}

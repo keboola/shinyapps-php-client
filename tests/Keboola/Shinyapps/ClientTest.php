@@ -18,7 +18,7 @@ class ClientTest extends \PHPUnit_Framework_TestCase
 
     public function testRun()
     {
-        mock = new MockHandler([
+        $mock = new MockHandler([
             new Response(
                 200,
                 ['Content-Type' => 'application/json'],
