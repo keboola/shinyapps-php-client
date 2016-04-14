@@ -113,21 +113,18 @@ class ApiTest extends \PHPUnit_Framework_TestCase
 
         $appConfig = json_decode(file_get_contents(__DIR__ . '/data/shinyapps-test.json'), true);
 
-        $result = $this->_shinyappsClient->createApp("test app", "test app description", );
+        $result = $this->_shinyappsClient->createApp("test app", "test app description", $appConfig);
 
         $this->assertArrayHasKey("url",$result);
         $this->assertArrayHasKey("configId",$result);
         $this->assertEquals($configId, $result['configId']);
 
-        $this->log->debug("Application URL: " . $result['url']);
-
         try {
             $appExists = $this->_shinyappsClient->pingApp($result['url']);
             $this->assertTrue($appExists, "The application was created successfully.");
-        } catch(Exception $e) {
+        } catch(HTTPException $e) {
             $this->assertTrue(false,"Application Ping failed: " . $e->getMessage());
         }
-        $this->log->debug("App deployed successfully. Test Delete ");
 
         $this->_shinyappsClient->archiveApp($configId);
 
@@ -143,9 +140,9 @@ class ApiTest extends \PHPUnit_Framework_TestCase
     {
         $configId = "shinyapps-private-test";
 
+        $appConfig = json_decode(file_get_contents(__DIR__ . '/data/shinyapps-private-test.json'), true);
 
-
-        $result = $this->_shinyappsClient->createApp();
+        $result = $this->_shinyappsClient->createApp("Pivate app", "Private app description", $appConfig);
 
         $this->assertArrayHasKey("url",$result);
         $this->assertArrayHasKey("configId",$result);
