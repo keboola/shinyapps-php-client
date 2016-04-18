@@ -49,7 +49,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase
     protected function createSourceData($tableName, $fileName)
     {
         $table = new \Keboola\StorageApi\Table($this->_client, "in.c-shinyapps-test-data." . $tableName);
-        $data = $table::csvStringToArray(file_get_contents(__DIR__ . '/data/' . $fileName));
+        $data = $table::csvStringToArray(file_get_contents(__DIR__ . '/_data/' . $fileName));
         $table->setFromArray($data, true);
         $table->save(true);
     }
@@ -74,7 +74,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase
         ));
         $this->_components = new \Keboola\StorageApi\Components($this->_client);
 
-        $this->_shinyappsClient = new Client(['token' => STORAGE_API_TOKEN]);
+        $this->_shinyappsClient = Client::factory(['token' => STORAGE_API_TOKEN, 'url' => SHINYAPPS_API_URL]);
 
         if ($this->_client->bucketExists("in.c-shinyapps-test")) {
             // Delete tables
@@ -111,10 +111,10 @@ class ApiTest extends \PHPUnit_Framework_TestCase
     {
         $configId = "shinyapps-test";
 
-        $appConfig = json_decode(file_get_contents(__DIR__ . '/data/shinyapps-test.json'), true);
+        $appConfig = json_decode(file_get_contents(__DIR__ . '/_data/shinyapps-test.json'), true);
 
         $result = $this->_shinyappsClient->createApp("test app", "test app description", $appConfig);
-
+        echo "create returned";
         $this->assertArrayHasKey("url",$result);
         $this->assertArrayHasKey("configId",$result);
         $this->assertEquals($configId, $result['configId']);
@@ -140,7 +140,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase
     {
         $configId = "shinyapps-private-test";
 
-        $appConfig = json_decode(file_get_contents(__DIR__ . '/data/shinyapps-private-test.json'), true);
+        $appConfig = json_decode(file_get_contents(__DIR__ . '/_data/shinyapps-private-test.json'), true);
 
         $result = $this->_shinyappsClient->createApp("Pivate app", "Private app description", $appConfig);
 

@@ -13,6 +13,7 @@
     },
     "require": {
         "keboola/storage-api-client": "~4.5",
+        "keboola/syrup-php-client": "~2.0",
         "guzzlehttp/guzzle": "~6.1"
     }
 }

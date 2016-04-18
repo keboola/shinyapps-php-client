@@ -15,7 +15,7 @@
     </php>
 
     <testsuites>
-        <testsuite name="KeboolaSyrupClientTests">
+        <testsuite name="KeboolaShinyappsClientTests">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

@@ -3,178 +3,34 @@
 namespace Keboola\Shinyapps;
 
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\MessageFormatter;
-use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\Uri;
+use Keboola\StorageApi\Client as SapiClient;
+use Keboola\Syrup\Client as SyrupClient;
+use Keboola\StorageApi\Components;
+use Keboola\StorageApi\Options\Components\Configuration;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Config\Definition\Exception\Exception;
 
 /**
  * Class Client
  * @package Keboola\Orchestrator
  */
-class Client extends \GuzzleHttp\Client
+class Client extends \Keboola\Syrup\Client
 {
-    const DEFAULT_API_URL = 'https://syrup.keboola.com';
-    const DEFAULT_USER_AGENT = 'Keboola Shinyapps PHP Client';
-    const DEFAULT_BACKOFF_RETRIES = 11;
-
-    protected $jobFinishedStates = ["cancelled", "canceled", "success", "error", "terminated"];
+    const SHINYAPPS_COMPONENT = "shiny";
 
     /**
-     * @var int Maximum delay between queries for job state
+     * @var SapiClient $sapilient
      */
-    protected $maxDelay = 10;
-
-    /**
-     * @var string Name of parent component
-     */
-    protected $super = '';
+    protected $sapilient;
 
     /**
      * @var string storageApi token
      */
     private $token;
-
-    /*
-     * @var string Actual base request URL.
-     */
-    private $url;
-
-
-    private static function createDefaultDecider($maxRetries = 3)
-    {
-        return function (
-            $retries,
-            RequestInterface $request,
-            ResponseInterface $response = null,
-            $error = null
-        ) use ($maxRetries) {
-            if ($retries >= $maxRetries) {
-                return false;
-            } elseif ($response && $response->getStatusCode() > 499) {
-                return true;
-            } elseif ($error) {
-                return true;
-            } else {
-                return false;
-            }
-        };
-    }
-
-
-    /**
-     * Create a client instance
-     *
-     * @param array $config Client configuration settings:
-     *     - token: (required) Storage API token.
-     *     - runId: (optional) Storage API runId.
-     *     - url: (optional) Syrup API URL to override the default (DEFAULT_API_URL).
-     *     - super: (optional) Name of parent component if any.
-     *     - userAgent: (optional) Custom user agent (appended to the default).
-     *     - backoffMaxTries: (optional) Number of retries in case of backend error.
-     *     - logger: (optional) instance of Psr\Log\LoggerInterface.
-     *     - handler: (optional) instance of GuzzleHttp\HandlerStack.
-     * @param callable $delay Optional custom delay method to apply (default is exponential)
-     * @return Client
-     */
-    public static function factory(array $config = [], callable $delay = null)
-    {
-        if (empty($config['token'])) {
-            throw new \InvalidArgumentException('Storage API token must be set.');
-        }
-        $token = $config['token'];
-
-        $apiUrl = self::DEFAULT_API_URL;
-
-        if (!empty($config['url'])) {
-            $apiUrl = $config['url'];
-        }
-        $runId = '';
-        if (!empty($config['runId'])) {
-            $runId = $config['runId'];
-        }
-        $userAgent = self::DEFAULT_USER_AGENT;
-        if (!empty($config['userAgent'])) {
-            $userAgent .= ' - ' . $config['userAgent'];
-        }
-        $maxRetries = self::DEFAULT_BACKOFF_RETRIES;
-        if (!empty($config['backoffMaxTries'])) {
-            $maxRetries = $config['backoffMaxTries'];
-        }
-
-        // Initialize handlers (start with those supplied in constructor)
-        if (isset($config['handler']) && is_a($config['handler'], HandlerStack::class)) {
-            $handlerStack = HandlerStack::create($config['handler']);
-        } else {
-            $handlerStack = HandlerStack::create();
-
-        }
-        // Set exponential backoff for cases where job detail returns error
-        $handlerStack->push(Middleware::retry(
-            self::createDefaultDecider($maxRetries),
-            $delay
-        ));
-        // Set handler to set default headers
-        $handlerStack->push(Middleware::mapRequest(
-            function (RequestInterface $request) use ($token, $runId, $userAgent) {
-                $req = $request->withHeader('X-StorageApi-Token', $token)
-                    ->withHeader('User-Agent', $userAgent);
-                if (!$req->hasHeader('content-type')) {
-                    $req = $req->withHeader('Content-type', 'application/json');
-                }
-                if ($runId) {
-                    $req = $req->withHeader('X-KBC-RunId', $runId);
-                }
-                return $req;
-            }
-        ));
-
-        // Set client logger
-        if (isset($config['logger']) && is_a($config['logger'], LoggerInterface::class)) {
-            $handlerStack->push(Middleware::log(
-                $config['logger'],
-                new MessageFormatter(
-                    "{hostname} {req_header_User-Agent} - [{ts}] \"{method} {resource} {protocol}/{version}\" " .
-                    "{code} {res_header_Content-Length}"
-                )
-            ));
-        }
-
-        // finally create the instance
-        $client = new static(['base_url' => $apiUrl, 'handler' => $handlerStack]);
-        $client->setUrl($apiUrl);
-        // attach the token to the client
-        $client->setToken($config['token']);
-        if (!empty($config['super'])) {
-            $client->setSuper($config['super']);
-        }
-        return $client;
-    }
-
-
-    /**
-     * Set parent component.
-     * @param string $super Name of the parent component.
-     */
-    protected function setSuper($super)
-    {
-        $this->super = $super;
-    }
-
-
-    /**
-     * Set request URL
-     * @param string $url Base url for requests.
-     */
-    protected function setUrl($url)
-    {
-        $this->url = $url;
-    }
 
     /**
      * set storageApi token
@@ -186,42 +42,44 @@ class Client extends \GuzzleHttp\Client
     }
 
     /**
-     * Decode a JSON response.
-     * @param Response $response
-     * @return array Parsed response.
-     * @throws ClientException In case response cannot be read properly.
+     * @param array $config
+     * @param callable|null $delay
+     * @return static ShinyappsClient
      */
-    private function decodeResponse(Response $response)
+    public static function factory(array $config = [], callable $delay = null)
     {
-        $data = json_decode($response->getBody()->read($response->getBody()->getSize()), true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new ClientException('Unable to parse response body into JSON: ' . json_last_error());
+        $client = parent::factory($config, $delay);
+
+        if (!empty($config['url'])) {
+            $client->setUrl($config['url']);
+        } else {
+            $client->setUrl(self::DEFAULT_API_URL);
         }
-        return $data === null ? array() : $data;
+        $client->setToken($config['token']);
+        var_dump($client);
+        return $client;
     }
 
     /**
      * Not implemented yet
      * List all Shiny applications in project.
-     *
-     * @return array Array with applications, each item has elements:
-     *  'appId', 'name', 'description', 'url', 'status', 'dateCreated', 'version', 'source' which
-     * contains 'packages', 'global', 'server', 'ui', 'rmarkdown'
+     * Currently receives 'unimplemented exception' on request
+     * @return array Array with applications
      * @throws ClientException
+     */
     public function listApps()
     {
         $uri = new Uri($this->url);
-        $uri = $uri->withPath("shinyapps/apps/");
+        $uri = $uri->withPath("shinyapps/configs/");
         try {
             $request = new Request('GET', $uri);
             $response = $this->send($request);
         } catch (RequestException $e) {
-            throw new ClientException($e->getMessage(), 0, $e);
+            throw new ClientException($e->getMessage(), $e->getCode(), $e);
         }
         $ret = $this->decodeResponse($response);
         return $ret['apps'];
     }
-     */
 
     /**
      * Create a new Shiny application.
@@ -236,7 +94,7 @@ class Client extends \GuzzleHttp\Client
      ***
      * @param array $options Optional cURL request options.
      ***
-     * @return array Job structure with items 'id', 'status', 'result'. Result contains array of app id and url.
+     * @return full app configuration including url
      * @throws ClientException
      */
     public function createApp($name, $description, $appConfig, $options=array())
@@ -254,12 +112,38 @@ class Client extends \GuzzleHttp\Client
             throw new ClientException($e->getMessage(), 0, $e);
         }
         $ret = $this->decodeResponse($response);
-        var_dump($ret);
-        if (!isset($ret['result'])) {
-            throw new ClientException("Invalid response.");
-        } else {
-            return $ret['result'];
+        $sapiClient = new \Keboola\StorageApi\Client(['token' => $this->token]);
+        $cmp = new Components($sapiClient);
+        $cfg = new Configuration();
+        $cfg->setComponentId(self::SHINYAPPS_COMPONENT);
+        $cfg->setConfigurationId($ret['id']);
+        $cfg->setName($name);
+        $cfg->setDescription($description);
+        $cfg->setConfiguration($appConfig);
+        try {
+            $cmp->getConfiguration(self::SHINYAPPS_COMPONENT, $ret['id']);
+            $cmp->updateConfiguration($cfg);
+        } catch (\Keboola\StorageApi\ClientException $e) {
+            if ($e->getCode() == 404) {
+                // component configuration doesn't exist yet, need to create it
+                $cmp->addConfiguration($cfg);
+            } else {
+                throw new ClientException($e->getMessage(), $e->getCode(),$e);
+            }
         }
+
+        try {
+            $this->pingApp($ret['id']);
+        } catch (ClientException $e) {
+            // the app doesn't exist, so we need to deploy it
+            $res = $this->runJob(self::SHINYAPPS_COMPONENT,["config" => $ret['id']]);
+        }
+        $uri = new Uri($this->url);
+        $uri = $uri->withPath("shinyapps/configs/" . $ret['id']);
+        return [
+            "configId" => $ret['id'],
+            "url" => $uri
+        ];
     }
 
     /**
@@ -271,6 +155,7 @@ class Client extends \GuzzleHttp\Client
      */
     public function deleteApp($appId)
     {
+
         $uri = new Uri($this->url);
         $uri = $uri->withPath("shinyapps/configs/" . $appId);
         try {
@@ -282,11 +167,11 @@ class Client extends \GuzzleHttp\Client
         return $response->getStatusCode() == 204;
     }
 
-    public function pingApp($appId) {
+    private function pingApp($appId) {
         $uri = new Uri($this->url);
         $uri = $uri->withPath("shinyapps/configs/" . $appId);
         try {
-            $request = new Request('POST', $uri, ['X-StorageApi-Token' => $this->token], ['X-StorageApi-Token' => $this->token]);
+            $request = new Request('POST', $uri, [], json_encode(['X-StorageApi-Token' => $this->token]));
             $response = $this->send($request);
         } catch (RequestException $e) {
             throw new ClientException($e->getMessage(), 0, $e);
