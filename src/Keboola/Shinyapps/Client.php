@@ -56,7 +56,6 @@ class Client extends \Keboola\Syrup\Client
             $client->setUrl(self::DEFAULT_API_URL);
         }
         $client->setToken($config['token']);
-        var_dump($client);
         return $client;
     }
 
@@ -131,7 +130,6 @@ class Client extends \Keboola\Syrup\Client
                 throw new ClientException($e->getMessage(), $e->getCode(),$e);
             }
         }
-
         try {
             $this->pingApp($ret['id']);
         } catch (ClientException $e) {
@@ -167,11 +165,13 @@ class Client extends \Keboola\Syrup\Client
         return $response->getStatusCode() == 204;
     }
 
-    private function pingApp($appId) {
+    public function pingApp($appId) {
         $uri = new Uri($this->url);
         $uri = $uri->withPath("shinyapps/configs/" . $appId);
         try {
-            $request = new Request('POST', $uri, [], json_encode(['X-StorageApi-Token' => $this->token]));
+            $request = new Request('POST', $uri, [
+                'form-params' => ['X-StorageApi-Token' => $this->token]
+            ]);
             $response = $this->send($request);
         } catch (RequestException $e) {
             throw new ClientException($e->getMessage(), 0, $e);
